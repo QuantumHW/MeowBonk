@@ -1,0 +1,122 @@
+name: Build installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Source commit to package
+        required: true
+        default: 2e34c4535fecee52cfa761eefd1b6bfbfe238868
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installers-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macOS
+            runner: macos-14
+            target: universal-apple-darwin
+            bundle: dmg
+          - platform: Windows
+            runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            bundle: nsis
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_HOME: ${{ github.workspace }}/.cache/cargo
+      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
+      CI: 'true'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+
+      - name: Set up Rust
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+
+      - name: Install macOS targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Test frontend
+        run: npm test
+
+      - name: Test Rust
+        run: npm run test:rust -- --locked
+
+      - name: Prepare Windows installer icon
+        if: runner.os == 'Windows'
+        run: npm run tauri -- icon src-tauri/icons/icon.png --output .cache/installer-icons
+
+      - name: Configure packaging
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          mkdirSync('.cache', { recursive: true });
+          const bundle = { active: true };
+          if (process.platform === 'win32') bundle.icon = ['../.cache/installer-icons/icon.ico'];
+          if (process.platform === 'darwin') bundle.macOS = { signingIdentity: '-' };
+          writeFileSync('.cache/bundle.json', JSON.stringify({ bundle }));
+          NODE
+
+      - name: Build installer
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+          BUNDLE_TYPE: ${{ matrix.bundle }}
+        run: npm run tauri -- build --ci --target "$BUILD_TARGET" --bundles "$BUNDLE_TYPE" --config .cache/bundle.json -- --locked
+
+      - name: Verify macOS application
+        if: runner.os == 'macOS'
+        run: |
+          app="src-tauri/target/universal-apple-darwin/release/bundle/macos/MeowBonk.app"
+          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/meowbonk"
+          codesign --verify --deep --strict "$app"
+
+      - name: Collect installer
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readdirSync, mkdirSync, copyFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          const kind = process.platform === 'darwin' ? 'dmg' : 'nsis';
+          const directory = join('src-tauri/target', process.env.BUILD_TARGET, 'release/bundle', kind);
+          const files = readdirSync(directory).filter(name => kind === 'dmg' ? name.endsWith('.dmg') : name.endsWith('-setup.exe'));
+          if (files.length !== 1) throw new Error(`Expected one installer, found ${files.length}`);
+          mkdirSync('.cache/release-artifacts', { recursive: true });
+          copyFileSync(join(directory, files[0]), join('.cache/release-artifacts', files[0]));
+          NODE
+
+      - name: Upload installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ matrix.platform }}-installer
+          path: .cache/release-artifacts/*
+          if-no-files-found: error
+          retention-days: 7

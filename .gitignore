@@ -12,6 +12,10 @@
 !/vite.config.ts
 !/.npmrc
 
+!/.github/
+!/.github/workflows/
+!/.github/workflows/installers.yml
+
 !/.cargo/
 !/.cargo/config.toml
 
