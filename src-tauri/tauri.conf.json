@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MeowBonk", "version": "0.1.0", "identifier": "com.meowbonk.desktop",
+  "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://127.0.0.1:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [{ "label": "settings", "title": "MeowBonk · 王之蔑视", "width": 860, "height": 640, "minWidth": 700, "minHeight": 560, "center": true, "visible": false }],
+    "security": { "csp": "default-src 'self'; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; script-src 'self'" }
+  },
+  "bundle": { "active": false, "icon": ["icons/icon.png", "icons/icon.icns"] }
+}

@@ -1,0 +1,1 @@
+{ "$schema": "../gen/schemas/desktop-schema.json", "identifier": "settings", "description": "设置窗口的事件与窗口基础能力", "windows": ["settings"], "permissions": ["core:event:default", "core:window:allow-hide"] }
