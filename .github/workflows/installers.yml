@@ -91,21 +91,11 @@ jobs:
       - name: Build installer
         run: npm run tauri -- build --verbose --ci --target "$BUILD_TARGET" --bundles "$BUNDLE_TYPE" --config .cache/bundle.json -- --locked 2>&1 | tee .cache/installer-build.log
 
-      - name: Upload build diagnostics
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: ${{ matrix.platform }}-diagnostics
-          path: |
-            .cache/installer-build.log
-            src-tauri/target/**/bundle/dmg/bundle_dmg.sh
-          retention-days: 3
-
       - name: Verify macOS application
         if: runner.os == 'macOS'
         run: |
           app="src-tauri/target/universal-apple-darwin/release/bundle/macos/MeowBonk.app"
-          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/meowbonk"
+          lipo "$app/Contents/MacOS/meowbonk" -verify_arch arm64 x86_64
           codesign --verify --deep --strict "$app"
 
       - name: Collect installer
@@ -128,3 +118,13 @@ jobs:
           path: .cache/release-artifacts/*
           if-no-files-found: error
           retention-days: 7
+
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ matrix.platform }}-diagnostics
+          path: |
+            .cache/installer-build.log
+            src-tauri/target/**/bundle/dmg/bundle_dmg.sh
+          retention-days: 3
