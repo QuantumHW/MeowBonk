@@ -8,6 +8,15 @@ on:
         required: true
         default: 2e34c4535fecee52cfa761eefd1b6bfbfe238868
         type: string
+      platform:
+        description: Installer platform
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - macOS
+          - Windows
 
 permissions:
   contents: read
@@ -19,20 +28,12 @@ concurrency:
 jobs:
   build:
     name: ${{ matrix.platform }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.platform == 'macOS' && 'macos-14' || 'windows-2022' }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: macOS
-            runner: macos-14
-            target: universal-apple-darwin
-            bundle: dmg
-          - platform: Windows
-            runner: windows-2022
-            target: x86_64-pc-windows-msvc
-            bundle: nsis
+        platform: ${{ fromJSON(inputs.platform == 'macOS' && '["macOS"]' || inputs.platform == 'Windows' && '["Windows"]' || '["macOS","Windows"]') }}
     defaults:
       run:
         shell: bash
@@ -40,6 +41,8 @@ jobs:
       CARGO_HOME: ${{ github.workspace }}/.cache/cargo
       CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
       CI: 'true'
+      BUILD_TARGET: ${{ matrix.platform == 'macOS' && 'universal-apple-darwin' || 'x86_64-pc-windows-msvc' }}
+      BUNDLE_TYPE: ${{ matrix.platform == 'macOS' && 'dmg' || 'nsis' }}
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -86,10 +89,17 @@ jobs:
           NODE
 
       - name: Build installer
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
-          BUNDLE_TYPE: ${{ matrix.bundle }}
-        run: npm run tauri -- build --ci --target "$BUILD_TARGET" --bundles "$BUNDLE_TYPE" --config .cache/bundle.json -- --locked
+        run: npm run tauri -- build --verbose --ci --target "$BUILD_TARGET" --bundles "$BUNDLE_TYPE" --config .cache/bundle.json -- --locked 2>&1 | tee .cache/installer-build.log
+
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ matrix.platform }}-diagnostics
+          path: |
+            .cache/installer-build.log
+            src-tauri/target/**/bundle/dmg/bundle_dmg.sh
+          retention-days: 3
 
       - name: Verify macOS application
         if: runner.os == 'macOS'
@@ -99,8 +109,6 @@ jobs:
           codesign --verify --deep --strict "$app"
 
       - name: Collect installer
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
         run: |
           node --input-type=module <<'NODE'
           import { readdirSync, mkdirSync, copyFileSync } from 'node:fs';
