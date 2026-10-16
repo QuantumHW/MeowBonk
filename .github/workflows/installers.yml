@@ -94,8 +94,17 @@ jobs:
       - name: Verify macOS application
         if: runner.os == 'macOS'
         run: |
-          app="src-tauri/target/universal-apple-darwin/release/bundle/macos/MeowBonk.app"
-          lipo "$app/Contents/MacOS/meowbonk" -verify_arch arm64 x86_64
+          dmg_directory="src-tauri/target/universal-apple-darwin/release/bundle/dmg"
+          dmg_files=("$dmg_directory"/*.dmg)
+          test "${#dmg_files[@]}" -eq 1
+          hdiutil verify "${dmg_files[0]}"
+          mount_point="$PWD/.cache/verify-dmg"
+          mkdir -p "$mount_point"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount_point" "${dmg_files[0]}"
+          trap 'hdiutil detach "$mount_point"' EXIT
+          app="$mount_point/MeowBonk.app"
+          binary=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")
+          lipo "$app/Contents/MacOS/$binary" -verify_arch arm64 x86_64
           codesign --verify --deep --strict "$app"
 
       - name: Collect installer
