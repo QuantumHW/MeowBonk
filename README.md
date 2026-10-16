@@ -8,6 +8,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-v0.1.0-4a43ea" alt="Version 0.1.0">
+  <img src="https://img.shields.io/badge/macOS-000000" alt="macOS">
+  <img src="https://img.shields.io/badge/Windows-0078D4" alt="Windows">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e" alt="MIT License"></a>
 </p>
 
